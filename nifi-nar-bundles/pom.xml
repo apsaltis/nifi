@@ -75,6 +75,7 @@
         <module>nifi-tcp-bundle</module>
         <module>nifi-gcp-bundle</module>
         <module>nifi-registry-bundle</module>
+        <module>nifi-soap-bundle</module>
   </modules>
     
   <dependencyManagement>
