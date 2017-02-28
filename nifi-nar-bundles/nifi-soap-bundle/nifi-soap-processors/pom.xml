@@ -28,6 +28,7 @@
     <properties>
         <axis2.version>1.7.1</axis2.version>
         <axiom.version>1.2.18</axiom.version>
+        <jackson.version>2.7.4</jackson.version>
     </properties>
     <dependencies>
         <dependency>
@@ -40,7 +41,11 @@
             <artifactId>axis2-transport-http</artifactId>
             <version>${axis2.version}</version>
         </dependency>
-
+        <dependency>
+            <groupId>org.apache.axis2</groupId>
+            <artifactId>axis2-jaxws</artifactId>
+            <version>${axis2.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.ws.commons.axiom</groupId>
             <artifactId>axiom-api</artifactId>
@@ -75,7 +80,7 @@
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
+            <artifactId>slf4j-log4j12</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -100,20 +105,17 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>2.7.4</version>
-            <scope>test</scope>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.7.4</version>
-            <scope>test</scope>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
-            <version>2.7.4</version>
-            <scope>test</scope>
+            <version>${jackson.version}</version>
         </dependency>
 
 
