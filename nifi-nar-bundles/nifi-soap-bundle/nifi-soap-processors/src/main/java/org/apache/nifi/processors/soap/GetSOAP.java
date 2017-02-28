@@ -155,13 +155,13 @@ public class GetSOAP extends AbstractProcessor {
     protected static final PropertyDescriptor AUTH_BY_HEADER = new PropertyDescriptor.Builder()
             .name("HeaderAuthentication")
             .description("If you need to do authentication with SOAP headers, this must be a json string " +
-                         "defining the structure since it varies from service to service. For example, " +
-                         "{ \"UserAuthentication\": { \"username\": \"larry\", \"password\": \"abc123\"," +
+                         "defining the structure since it varies from service to service. Username and Password " +
+                         "must be set in the separate parameters to this processors and referenced here " +
+                         "as variables ${Username} and ${Password}. For example, " +
+                         "{ \"UserAuthentication\": { \"username\": \"${Username}\", \"password\": \"${Password}\"," +
                          " \"some_other_custom_field\": \"value\" }")
             .required(false)
             .expressionLanguageSupported(true)
-            .sensitive(true)
-            .dynamic(false)
             .addValidator(new Validator() {
                 @Override
                 public ValidationResult validate(String subject, String value, ValidationContext context) {

@@ -102,7 +102,8 @@ public class GetSOAPIT {
         assert (null != flowFileList);
         for (MockFlowFile flowFile : flowFileList) {
             String data = new String(testRunner.getContentAsByteArray(flowFile));
-            logger.info("Data returned: {}", data);
+            logger.debug("Data returned: {}", data);
+            Assert.assertTrue(data.startsWith("<StockQuotes><Stock><Symbol>YHOO</Symbol>"));
         }
     }
 
