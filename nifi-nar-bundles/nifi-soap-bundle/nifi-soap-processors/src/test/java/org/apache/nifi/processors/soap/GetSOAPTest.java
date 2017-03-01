@@ -32,12 +32,16 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.mockserver.client.server.MockServerClient;
 import org.mockserver.integration.ClientAndServer;
+import org.mockserver.model.HttpCallback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.apache.nifi.processors.soap.GetSOAP.REL_SUCCESS;
@@ -47,6 +51,8 @@ import static org.mockserver.model.HttpResponse.response;
 
 public class GetSOAPTest {
 
+    private static final Logger logger = LoggerFactory.getLogger(GetSOAPTest.class);
+
     private TestRunner testRunner;
 
     private static ClientAndServer mockServer;
@@ -54,6 +60,23 @@ public class GetSOAPTest {
     @BeforeClass
     public static void setup() {
         mockServer = startClientAndServer(1080);
+
+        final String xmlBody = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n" +
+                               "<SOAP-ENV:Envelope SOAP-ENV:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\" xmlns:SOAP-ENV=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:SOAP-ENC=\"http://schemas.xmlsoap.org/soap/encoding/\">\n" +
+                               "    <SOAP-ENV:Body>\n" +
+                               "        <ns1:LatLonListZipCodeResponse xmlns:ns1=\"http://graphical.weather.gov/xml/DWMLgen/wsdl/ndfdXML.wsdl\">\n" +
+                               "            <listLatLonOut xsi:type=\"xsd:string\">&lt;?xml version=&apos;1.0&apos;?&gt;&lt;dwml version=&apos;1.0&apos; xmlns:xsd=&apos;http://www.w3.org/2001/XMLSchema&apos; xmlns:xsi=&apos;http://www.w3.org/2001/XMLSchema-instance&apos; xsi:noNamespaceSchemaLocation=&apos;http://graphical.weather.gov/xml/DWMLgen/schema/DWML.xsd&apos;&gt;&lt;latLonList&gt;35.9153,-79.0838&lt;/latLonList&gt;&lt;/dwml&gt;</listLatLonOut>\n" +
+                               "        </ns1:LatLonListZipCodeResponse>\n" +
+                               "    </SOAP-ENV:Body>\n" +
+                               "</SOAP-ENV:Envelope>";
+
+        mockServer.when(request().withMethod("POST").withPath("/test_path"))
+                  .respond(response().withBody(xmlBody));
+
+        // This callback will verify the request is valid XML
+        mockServer.when(request().withMethod("POST").withPath("/test_path_callback"))
+                  .callback(HttpCallback.callback()
+                                        .withCallbackClass(VerifyRequestCallback.class.getName()));
     }
 
     @AfterClass
@@ -87,19 +110,44 @@ public class GetSOAPTest {
         testRunner.run();
     }
 
+    /**
+     * This test verifies a method name set using expression language works.
+     */
+    @Test
+    public void testExpressionMethodName() {
+
+        testRunner.setProperty(GetSOAP.ENDPOINT_URL, "http://localhost:1080/test_path_callback");
+        testRunner.setProperty(GetSOAP.WSDL_URL, "http://localhost:1080/test_path_callback.wsdl");
+        testRunner.setProperty(GetSOAP.METHOD_NAME, "${method_name}");
+        testRunner.setProperty(GetSOAP.API_NAMESPACE, "http://localhost:1080/");
+
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("method_name", "getTransactionList");
+
+        // Here we are specifying the method name in an attribute of the flow file. It should succeed.
+        testRunner.enqueue("", attributes);
+        testRunner.run();
+
+        testRunner.assertAllFlowFilesTransferred(REL_SUCCESS, 1);
+        List<MockFlowFile> flowFileList = testRunner.getFlowFilesForRelationship(REL_SUCCESS);
+        assert (null != flowFileList);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testInvalidMethodName() {
+
+        testRunner.setProperty(GetSOAP.ENDPOINT_URL, "http://localhost:1080/test_path_callback");
+        testRunner.setProperty(GetSOAP.WSDL_URL, "http://localhost:1080/test_path_callback.wsdl");
+        testRunner.setProperty(GetSOAP.METHOD_NAME, "${method_name}");
+        testRunner.setProperty(GetSOAP.API_NAMESPACE, "http://localhost:1080/");
+
+        // Verify that if we don't specify the method name that an error is thrown.
+        testRunner.enqueue("");
+        testRunner.run();
+    }
+
     @Test
     public void testValidHeaderAuth() {
-        final String xmlBody = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n" +
-                               "<SOAP-ENV:Envelope SOAP-ENV:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\" xmlns:SOAP-ENV=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:SOAP-ENC=\"http://schemas.xmlsoap.org/soap/encoding/\">\n" +
-                               "    <SOAP-ENV:Body>\n" +
-                               "        <ns1:LatLonListZipCodeResponse xmlns:ns1=\"http://graphical.weather.gov/xml/DWMLgen/wsdl/ndfdXML.wsdl\">\n" +
-                               "            <listLatLonOut xsi:type=\"xsd:string\"></listLatLonOut>\n" +
-                               "        </ns1:LatLonListZipCodeResponse>\n" +
-                               "    </SOAP-ENV:Body>\n" +
-                               "</SOAP-ENV:Envelope>";
-
-        new MockServerClient("127.0.0.1", 1080).when(request().withMethod("POST"))
-                                               .respond(response().withBody(xmlBody));
 
         testRunner.setProperty(GetSOAP.AUTH_BY_HEADER, "{\n" +
                                                        "  \"UserAuthentication\": {\n" +
@@ -125,18 +173,6 @@ public class GetSOAPTest {
     @Test
     public void testHTTPUsernamePasswordProcessor() throws IOException {
 
-        final String xmlBody = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n" +
-                               "<SOAP-ENV:Envelope SOAP-ENV:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\" xmlns:SOAP-ENV=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:SOAP-ENC=\"http://schemas.xmlsoap.org/soap/encoding/\">\n" +
-                               "    <SOAP-ENV:Body>\n" +
-                               "        <ns1:LatLonListZipCodeResponse xmlns:ns1=\"http://graphical.weather.gov/xml/DWMLgen/wsdl/ndfdXML.wsdl\">\n" +
-                               "            <listLatLonOut xsi:type=\"xsd:string\">&lt;?xml version=&apos;1.0&apos;?&gt;&lt;dwml version=&apos;1.0&apos; xmlns:xsd=&apos;http://www.w3.org/2001/XMLSchema&apos; xmlns:xsi=&apos;http://www.w3.org/2001/XMLSchema-instance&apos; xsi:noNamespaceSchemaLocation=&apos;http://graphical.weather.gov/xml/DWMLgen/schema/DWML.xsd&apos;&gt;&lt;latLonList&gt;35.9153,-79.0838&lt;/latLonList&gt;&lt;/dwml&gt;</listLatLonOut>\n" +
-                               "        </ns1:LatLonListZipCodeResponse>\n" +
-                               "    </SOAP-ENV:Body>\n" +
-                               "</SOAP-ENV:Envelope>";
-
-        new MockServerClient("127.0.0.1", 1080).when(request().withMethod("POST"))
-                                               .respond(response().withBody(xmlBody));
-
         testRunner.setProperty(GetSOAP.ENDPOINT_URL, "http://localhost:1080/test_path");
         testRunner.setProperty(GetSOAP.WSDL_URL, "http://localhost:1080/test_path.wsdl");
         testRunner.setProperty(GetSOAP.METHOD_NAME, "testMethod");
@@ -151,24 +187,14 @@ public class GetSOAPTest {
         assert (null != flowFileList);
 
         final String expectedBody = "<?xml version='1.0'?><dwml version='1.0' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:noNamespaceSchemaLocation='http://graphical.weather.gov/xml/DWMLgen/schema/DWML.xsd'><latLonList>35.9153,-79.0838</latLonList></dwml>";
+        String contents = new String(testRunner.getContentAsByteArray(flowFileList.get(0)));
+        logger.debug("Contents: {}", contents);
         flowFileList.get(0).assertContentEquals(expectedBody.getBytes());
 
     }
 
     @Test
     public void testHTTPWithUsernamePasswordProcessor() throws IOException {
-
-        final String xmlBody = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n" +
-                               "<SOAP-ENV:Envelope SOAP-ENV:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\" xmlns:SOAP-ENV=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:SOAP-ENC=\"http://schemas.xmlsoap.org/soap/encoding/\">\n" +
-                               "    <SOAP-ENV:Body>\n" +
-                               "        <ns1:LatLonListZipCodeResponse xmlns:ns1=\"http://graphical.weather.gov/xml/DWMLgen/wsdl/ndfdXML.wsdl\">\n" +
-                               "            <listLatLonOut xsi:type=\"xsd:string\">&lt;?xml version=&apos;1.0&apos;?&gt;&lt;dwml version=&apos;1.0&apos; xmlns:xsd=&apos;http://www.w3.org/2001/XMLSchema&apos; xmlns:xsi=&apos;http://www.w3.org/2001/XMLSchema-instance&apos; xsi:noNamespaceSchemaLocation=&apos;http://graphical.weather.gov/xml/DWMLgen/schema/DWML.xsd&apos;&gt;&lt;latLonList&gt;35.9153,-79.0838&lt;/latLonList&gt;&lt;/dwml&gt;</listLatLonOut>\n" +
-                               "        </ns1:LatLonListZipCodeResponse>\n" +
-                               "    </SOAP-ENV:Body>\n" +
-                               "</SOAP-ENV:Envelope>";
-
-        new MockServerClient("127.0.0.1", 1080).when(request().withMethod("POST"))
-                                               .respond(response().withBody(xmlBody));
 
         testRunner.setProperty(GetSOAP.ENDPOINT_URL, "http://localhost:1080/test_path");
         testRunner.setProperty(GetSOAP.WSDL_URL, "http://localhost:1080/test_path.wsdl");

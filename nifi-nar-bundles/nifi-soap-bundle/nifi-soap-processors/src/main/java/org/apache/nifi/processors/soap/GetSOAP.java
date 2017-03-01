@@ -98,7 +98,7 @@ public class GetSOAP extends AbstractProcessor {
             .name("SOAP Method Name")
             .description("The method exposed by the SOAP webservice that should be invoked.")
             .required(true)
-            .expressionLanguageSupported(false)
+            .expressionLanguageSupported(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -216,6 +216,7 @@ public class GetSOAP extends AbstractProcessor {
     private OMElement authHeader = null;
     private static final ObjectMapper mapper = new ObjectMapper();
     private boolean skipFirstElement = false;
+    private String apiNamespace = null;
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
@@ -282,7 +283,9 @@ public class GetSOAP extends AbstractProcessor {
 
         final String userName = context.getProperty(USER_NAME).getValue();
         final String password = context.getProperty(PASSWORD).getValue();
-        final String apiNamespace = context.getProperty(API_NAMESPACE).getValue();
+        apiNamespace = context.getProperty(API_NAMESPACE).getValue();
+        skipFirstElement = context.getProperty(SKIP_FIRST_ELEMENT).asBoolean();
+
         Map<String, String> attributes = new HashMap<>();
         attributes.put("Username", userName);
         attributes.put("Password", password);
@@ -290,7 +293,6 @@ public class GetSOAP extends AbstractProcessor {
         final String authByHeader = context.getProperty(AUTH_BY_HEADER)
                                            .evaluateAttributeExpressions(attributes)
                                            .getValue();
-        skipFirstElement = context.getProperty(SKIP_FIRST_ELEMENT).asBoolean();
 
         omNamespace = fac.createOMNamespace(apiNamespace, "ns1");
         if (authByHeader != null && !"".equals(authByHeader)) {
@@ -315,8 +317,6 @@ public class GetSOAP extends AbstractProcessor {
 
         try {
             serviceClient = new ServiceClient();
-            // TODO: Not sure if this will apply in all cases. Some services require SOAPAction, some don't.
-            options.setAction(apiNamespace + context.getProperty(METHOD_NAME).getValue());
             serviceClient.setOptions(options);
         }
         catch (AxisFault axisFault) {
@@ -366,8 +366,15 @@ public class GetSOAP extends AbstractProcessor {
             return;
         }
 
+        final String methodName = context.getProperty(METHOD_NAME)
+                                         .evaluateAttributeExpressions(flowFile)
+                                         .getValue();
+
+        // TODO: Not sure if this will apply in all cases. Some services require SOAPAction, some don't.
+        serviceClient.getOptions().setAction(apiNamespace + methodName);
+
         //get the dynamic properties, execute the call and return the results
-        final OMElement method = getSoapMethod(fac, omNamespace, context.getProperty(METHOD_NAME).getValue());
+        final OMElement method = getSoapMethod(fac, omNamespace, methodName);
 
         //now we need to walk the arguments and add them
         addArgumentsToMethod(context, fac, omNamespace, method, flowFile);
